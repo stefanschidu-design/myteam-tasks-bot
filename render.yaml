@@ -1,0 +1,23 @@
+services:
+  - type: web
+    name: myteam-tasks-bot
+    runtime: python
+    rootDir: bot
+    buildCommand: pip install -r requirements.txt
+    startCommand: python -m bot.main
+    plan: free
+    envVars:
+      - key: BOT_TOKEN
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_KEY
+        sync: false
+      - key: MANAGER_TELEGRAM_ID
+        sync: false
+      - key: WEBAPP_URL
+        sync: false
+      - key: WEBHOOK_URL
+        sync: false
+      - key: WEBHOOK_SECRET
+        sync: false
