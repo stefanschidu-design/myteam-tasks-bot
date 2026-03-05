@@ -32,7 +32,7 @@ async def health_handler(request: web.Request) -> web.Response:
 
 
 def main() -> None:
-    bot = Bot(token=settings.BOT_TOKEN)
+    bot = Bot(token=settings.BOT_TOKEN.strip())
     dp = Dispatcher()
 
     # Middleware inregistrat pe toate tipurile de update-uri
