@@ -16,7 +16,8 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-async def on_startup(bot: Bot) -> None:
+async def on_startup(bot: Bot, scheduler) -> None:
+    scheduler.start()
     webhook_url = f"{settings.WEBHOOK_URL}/webhook"
     await bot.set_webhook(url=webhook_url, secret_token=settings.WEBHOOK_SECRET)
     logger.info("Webhook setat la %s", webhook_url)
@@ -46,7 +47,6 @@ def main() -> None:
 
     # Scheduler (overdue check + raport zilnic)
     scheduler = setup_scheduler(bot)
-    scheduler.start()
 
     # Webhook server
     app = web.Application()
@@ -58,7 +58,7 @@ def main() -> None:
     handler.register(app, path="/webhook")
     setup_application(app, dp, bot=bot)
     app.router.add_get("/health", health_handler)
-    app.on_startup.append(lambda _: on_startup(bot))
+    app.on_startup.append(lambda _: on_startup(bot, scheduler))
     app.on_shutdown.append(lambda _: on_shutdown(bot))
 
     port = int(os.environ.get("PORT", 8000))
