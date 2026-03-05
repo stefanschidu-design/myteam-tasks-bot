@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import os
 from aiohttp import web
 from aiogram import Bot, Dispatcher
 from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
@@ -60,7 +61,8 @@ def main() -> None:
     app.on_startup.append(lambda _: on_startup(bot))
     app.on_shutdown.append(lambda _: on_shutdown(bot))
 
-    web.run_app(app, host="0.0.0.0", port=8000)
+    port = int(os.environ.get("PORT", 8000))
+    web.run_app(app, host="0.0.0.0", port=port)
 
 
 if __name__ == "__main__":
