@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     WEBAPP_URL: str
     WEBHOOK_URL: str
     WEBHOOK_SECRET: str
+    ELEVENLABS_API_KEY: str = ""
 
     class Config:
         env_file = str(_ENV_FILE)

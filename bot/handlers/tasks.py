@@ -1,11 +1,12 @@
 from datetime import datetime
 from aiogram import Router, F
-from aiogram.filters import Command
+from aiogram.filters import Command, StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import Message, CallbackQuery
 from bot.services.task_service import create_task, get_tasks_for_user, get_all_tasks
 from bot.services.user_service import get_all_employees, get_user_by_id
+from bot.services.elevenlabs import transcribe_voice, is_voice_available
 from bot.keyboards.inline import (
     task_status_keyboard,
     priority_keyboard,
@@ -32,6 +33,61 @@ class NewTaskFSM(StatesGroup):
     waiting_priority = State()
 
 
+# ─── voice helpers ────────────────────────────────────────────────────────────
+
+async def _download_voice(message: Message) -> bytes:
+    file = await message.bot.get_file(message.voice.file_id)
+    buf = await message.bot.download_file(file.file_path)
+    return buf.read()
+
+
+async def _transcribe_and_set_title(message: Message, state: FSMContext) -> bool:
+    """Download voice, transcribe, store as title, advance FSM to waiting_description.
+    Returns True on success, False on error (error message already sent)."""
+    status_msg = await message.answer("🎙 Transcribing...")
+    try:
+        file_bytes = await _download_voice(message)
+        title = await transcribe_voice(file_bytes)
+    except Exception:
+        await status_msg.delete()
+        await message.answer("❌ Transcription error. Please try again or type the title manually.")
+        return False
+
+    await status_msg.delete()
+    await state.update_data(title=title)
+    await state.set_state(NewTaskFSM.waiting_description)
+
+    employees = await get_all_employees()
+    if not employees:
+        await state.clear()
+        await message.answer("⚠️ Nu exista angajati inregistrati inca.")
+        return False
+
+    await message.answer(
+        f"🎙 Recognized: <b>{title}</b>\n\n"
+        f"📄 Introdu <b>descrierea</b> sarcinii:\n<i>(trimite /skip daca nu este necesara)</i>",
+        parse_mode="HTML",
+    )
+    return True
+
+
+# ─── global voice handler (outside FSM) ──────────────────────────────────────
+
+@router.message(
+    F.voice,
+    ~StateFilter(NewTaskFSM.waiting_title, NewTaskFSM.waiting_description),
+)
+async def handle_voice_message(message: Message, state: FSMContext, db_user: dict):
+    if db_user["role"] != "manager":
+        await message.answer("❌ Doar managerii pot crea sarcini prin mesaj vocal.")
+        return
+    if not is_voice_available():
+        await message.answer("⚠️ Functia vocala nu este configurata. Foloseste /newtask si introdu textul manual.")
+        return
+
+    await _transcribe_and_set_title(message, state)
+
+
 # ─── /newtask ────────────────────────────────────────────────────────────────
 
 @router.message(Command("newtask"))
@@ -43,6 +99,14 @@ async def cmd_newtask(message: Message, state: FSMContext, db_user: dict):
     await message.answer("📝 Introdu <b>titlul</b> sarcinii:", parse_mode="HTML")
 
 
+@router.message(NewTaskFSM.waiting_title, F.voice)
+async def process_title_voice(message: Message, state: FSMContext):
+    if not is_voice_available():
+        await message.answer("⚠️ Functia vocala nu este configurata. Introdu titlul manual:")
+        return
+    await _transcribe_and_set_title(message, state)
+
+
 @router.message(NewTaskFSM.waiting_title)
 async def process_title(message: Message, state: FSMContext):
     await state.update_data(title=message.text.strip())
@@ -50,6 +114,35 @@ async def process_title(message: Message, state: FSMContext):
     await message.answer(
         "📄 Introdu <b>descrierea</b> sarcinii:\n<i>(trimite /skip daca nu este necesara)</i>",
         parse_mode="HTML",
+    )
+
+
+@router.message(NewTaskFSM.waiting_description, F.voice)
+async def process_description_voice(message: Message, state: FSMContext):
+    if not is_voice_available():
+        await message.answer("⚠️ Functia vocala nu este configurata. Introdu descrierea manual:")
+        return
+    status_msg = await message.answer("🎙 Transcribing...")
+    try:
+        file_bytes = await _download_voice(message)
+        desc = await transcribe_voice(file_bytes)
+    except Exception:
+        await status_msg.delete()
+        await message.answer("❌ Transcription error. Please try again or type the description manually.")
+        return
+    await status_msg.delete()
+    await state.update_data(description=desc)
+    employees = await get_all_employees()
+    if not employees:
+        await message.answer("⚠️ Nu exista angajati inregistrati inca.")
+        await state.clear()
+        return
+    await state.set_state(NewTaskFSM.waiting_assignee)
+    await message.answer(
+        f"🎙 Recognized: <b>{desc}</b>\n\n"
+        f"👥 Selecteaza <b>responsabilul</b> sarcinii:",
+        parse_mode="HTML",
+        reply_markup=assignee_keyboard(employees),
     )
 
 
