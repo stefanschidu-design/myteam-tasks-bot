@@ -18,9 +18,15 @@ logger = logging.getLogger(__name__)
 
 async def on_startup(bot: Bot, scheduler) -> None:
     scheduler.start()
+    if not settings.WEBHOOK_URL:
+        logger.error("WEBHOOK_URL is not set! Bot cannot receive updates.")
+        return
     webhook_url = f"{settings.WEBHOOK_URL}/webhook"
-    await bot.set_webhook(url=webhook_url, secret_token=settings.WEBHOOK_SECRET)
-    logger.info("Webhook setat la %s", webhook_url)
+    try:
+        await bot.set_webhook(url=webhook_url, secret_token=settings.WEBHOOK_SECRET)
+        logger.info("Webhook setat la %s", webhook_url)
+    except Exception as e:
+        logger.error("Failed to set webhook: %s", e, exc_info=True)
 
 
 async def on_shutdown(bot: Bot) -> None:

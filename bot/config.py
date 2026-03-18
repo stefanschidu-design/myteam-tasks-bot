@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 from pydantic_settings import BaseSettings
 
@@ -10,8 +11,8 @@ class Settings(BaseSettings):
     SUPABASE_SERVICE_KEY: str
     MANAGER_TELEGRAM_ID: int
     WEBAPP_URL: str
-    WEBHOOK_URL: str
-    WEBHOOK_SECRET: str
+    WEBHOOK_URL: str = ""
+    WEBHOOK_SECRET: str = "default_secret"
     ELEVENLABS_API_KEY: str = ""
 
     class Config:
@@ -20,3 +21,9 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+# Auto-detect Render URL if WEBHOOK_URL not set
+if not settings.WEBHOOK_URL:
+    render_url = os.environ.get("RENDER_EXTERNAL_URL", "")
+    if render_url:
+        settings.WEBHOOK_URL = render_url
