@@ -30,8 +30,9 @@ async def on_startup(bot: Bot, scheduler) -> None:
 
 
 async def on_shutdown(bot: Bot) -> None:
-    await bot.delete_webhook()
-    logger.info("Webhook sters.")
+    # Do NOT delete webhook on shutdown — Render free tier sleeps/restarts
+    # frequently and we want Telegram to queue messages until we wake up
+    logger.info("Bot shutting down (webhook preserved).")
 
 
 async def health_handler(request: web.Request) -> web.Response:

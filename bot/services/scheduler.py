@@ -1,4 +1,5 @@
 import logging
+import aiohttp
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
@@ -13,6 +14,30 @@ PRIORITY_EMOJI = {"low": "🟢", "medium": "🟡", "high": "🔴"}
 
 def setup_scheduler(bot: Bot) -> AsyncIOScheduler:
     scheduler = AsyncIOScheduler(timezone="Europe/Bucharest")
+
+    # ─── Self-ping to keep Render free tier alive ─────────────────────────
+    @scheduler.scheduled_job(IntervalTrigger(minutes=10))
+    async def keep_alive():
+        if not settings.WEBHOOK_URL:
+            return
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(f"{settings.WEBHOOK_URL}/health", timeout=aiohttp.ClientTimeout(total=10)) as resp:
+                    logger.info("Keep-alive ping: %s", resp.status)
+        except Exception as e:
+            logger.warning("Keep-alive ping failed: %s", e)
+
+    # ─── Re-register webhook every 30 min (in case Telegram dropped it) ──
+    @scheduler.scheduled_job(IntervalTrigger(minutes=30))
+    async def ensure_webhook():
+        if not settings.WEBHOOK_URL:
+            return
+        try:
+            webhook_url = f"{settings.WEBHOOK_URL}/webhook"
+            await bot.set_webhook(url=webhook_url, secret_token=settings.WEBHOOK_SECRET)
+            logger.info("Webhook re-registered: %s", webhook_url)
+        except Exception as e:
+            logger.error("Failed to re-register webhook: %s", e)
 
     @scheduler.scheduled_job(IntervalTrigger(hours=1))
     async def check_overdue():
