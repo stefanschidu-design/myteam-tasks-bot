@@ -17,16 +17,18 @@ logger = logging.getLogger(__name__)
 
 
 async def on_startup(bot: Bot, scheduler) -> None:
-    scheduler.start()
-    if not settings.WEBHOOK_URL:
-        logger.error("WEBHOOK_URL is not set! Bot cannot receive updates.")
-        return
-    webhook_url = f"{settings.WEBHOOK_URL}/webhook"
     try:
+        logger.info("on_startup: WEBHOOK_URL=%s", settings.WEBHOOK_URL)
+        scheduler.start()
+        logger.info("on_startup: scheduler started")
+        if not settings.WEBHOOK_URL:
+            logger.error("WEBHOOK_URL is not set! Bot cannot receive updates.")
+            return
+        webhook_url = f"{settings.WEBHOOK_URL}/webhook"
         await bot.set_webhook(url=webhook_url, secret_token=settings.WEBHOOK_SECRET)
         logger.info("Webhook setat la %s", webhook_url)
     except Exception as e:
-        logger.error("Failed to set webhook: %s", e, exc_info=True)
+        logger.error("on_startup FAILED: %s", e, exc_info=True)
 
 
 async def on_shutdown(bot: Bot) -> None:
@@ -37,6 +39,20 @@ async def on_shutdown(bot: Bot) -> None:
 
 async def health_handler(request: web.Request) -> web.Response:
     return web.Response(text="OK")
+
+
+async def debug_handler(request: web.Request) -> web.Response:
+    import json
+    info = {
+        "webhook_url": settings.WEBHOOK_URL,
+        "webhook_url_set": bool(settings.WEBHOOK_URL),
+        "bot_token_set": bool(settings.BOT_TOKEN),
+        "supabase_url": settings.SUPABASE_URL,
+        "supabase_key_set": bool(settings.SUPABASE_SERVICE_KEY),
+        "elevenlabs_key_set": bool(settings.ELEVENLABS_API_KEY),
+        "manager_id": settings.MANAGER_TELEGRAM_ID,
+    }
+    return web.Response(text=json.dumps(info, indent=2), content_type="application/json")
 
 
 def main() -> None:
@@ -65,6 +81,7 @@ def main() -> None:
     handler.register(app, path="/webhook")
     setup_application(app, dp, bot=bot)
     app.router.add_get("/health", health_handler)
+    app.router.add_get("/debug", debug_handler)
     app.on_startup.append(lambda _: on_startup(bot, scheduler))
     app.on_shutdown.append(lambda _: on_shutdown(bot))
 
